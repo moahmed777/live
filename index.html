@@ -1,74 +1,100 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebSocket Chat</title>
-    <style>
-        #messages {
-            max-width: 600px;
-            margin: 20px auto;
-            padding: 10px;
-            border: 1px solid #ccc;
-            height: 300px;
-            overflow-y: scroll;
-        }
-        #messageInput {
-            width: calc(100% - 22px);
-            padding: 10px;
-            margin: 20px auto;
-            display: block;
-        }
-        #sendButton {
-            display: block;
-            margin: 10px auto;
-            padding: 10px 20px;
-        }
-    </style>
-</head>
-<body>
-    <div id="messages"></div>
-    <input type="text" id="messageInput" placeholder="Type a message...">
-    <button id="sendButton">Send</button>
+--تنقل لاعبين ومن ثم ارجاع نفس مكان قوي
+local gui = Instance.new("ScreenGui")
+gui.ResetOnSpawn = false  -- تأكد من أن الواجهة (القائمة) لا تعيد تعيين نفسها عندما يموت اللاعب
+gui.Parent = game.Players.LocalPlayer.PlayerGui
 
-    <script>
-        const ws = new WebSocket('ws://192.168.220.212:8080');  // استبدل بعنوان IP المناسب
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 200, 0, 320) -- ضبط الارتفاع ليكون 320
+frame.Position = UDim2.new(0, 10, 0, 10)
+frame.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)
+frame.BorderSizePixel = 2
+frame.BorderColor3 = Color3.new(1, 1, 1)
+frame.Visible = true
+frame.Parent = gui
 
-        ws.onopen = () => {
-            console.log('Connected to the server');
-        };
+local playerList = Instance.new("ScrollingFrame")
+playerList.Size = UDim2.new(0, 180, 0, 220) -- تقليل الارتفاع لتناسب الأزرار الأخرى
+playerList.Position = UDim2.new(0, 10, 0, 10)
+playerList.BackgroundColor3 = Color3.new(0.5, 0.5, 0.5)
+playerList.CanvasSize = UDim2.new(0, 0, 0, 0) -- تعيين حجم اللوحة الداخلية
+playerList.ScrollBarThickness = 10
+playerList.Parent = frame
 
-        ws.onmessage = event => {
-            const messages = document.getElementById('messages');
-            const reader = new FileReader();
+local savedPosition = nil
 
-            reader.onload = () => {
-                const message = document.createElement('div');
-                message.textContent = reader.result;
-                messages.appendChild(message);
-                messages.scrollTop = messages.scrollHeight;
-            };
+local function updatePlayerList()
+    playerList:ClearAllChildren()
 
-            reader.readAsText(event.data); // قراءة Blob كـ نص
-        };
+    local players = game.Players:GetPlayers()
+    local canvasHeight = #players * 35 -- حساب الارتفاع الكلي للوحة بناءً على عدد اللاعبين
+    playerList.CanvasSize = UDim2.new(0, 0, 0, canvasHeight)
 
-        const input = document.getElementById('messageInput');
-        const sendButton = document.getElementById('sendButton');
+    for i, player in ipairs(players) do
+        local playerButton = Instance.new("TextButton")
+        playerButton.Text = player.Name
+        playerButton.Size = UDim2.new(0, 180, 0, 30)
+        playerButton.Position = UDim2.new(0, 0, 0, (i - 1) * 35)
+        playerButton.BackgroundColor3 = Color3.new(0.7, 0.7, 0.7)
+        playerButton.Parent = playerList
 
-        const sendMessage = () => {
-            if (input.value.trim() !== '') {
-                ws.send(input.value);
-                input.value = '';
-            }
-        };
+        playerButton.MouseButton1Click:Connect(function()
+            local localPlayer = game:GetService("Players").LocalPlayer
+            local targetPlayer = game:GetService("Players"):FindFirstChild(player.Name)
 
-        input.addEventListener('keydown', event => {
-            if (event.key === 'Enter') {
-                sendMessage();
-            }
-        });
+            if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                localPlayer.Character.HumanoidRootPart.CFrame = targetPlayer.Character.HumanoidRootPart.CFrame
 
-        sendButton.addEventListener('click', sendMessage);
-    </script>
-</body>
-</html>
+                -- الانتظار لفترة زمنية محددة ثم العودة إلى الموقع المحفوظ
+                wait(1) -- هنا يمكنك تعديل الوقت بالثواني حسب الحاجة
+                if savedPosition then
+                    localPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(savedPosition)
+                end
+            end
+        end)
+    end
+end
+
+local updateButton = Instance.new("TextButton")
+updateButton.Text = "تحديث القائمة"
+updateButton.Size = UDim2.new(0, 180, 0, 30)
+updateButton.Position = UDim2.new(0, 10, 0, 240) -- تعديل الموقع لتحت إطار اللاعب
+updateButton.BackgroundColor3 = Color3.new(0.3, 0.3, 0.6)
+updateButton.Parent = frame
+updateButton.MouseButton1Click:Connect(updatePlayerList)
+
+local savePositionButton = Instance.new("TextButton")
+savePositionButton.Text = "حفظ الموقع"
+savePositionButton.Size = UDim2.new(0, 180, 0, 30)
+savePositionButton.Position = UDim2.new(0, 10, 0, 280) -- تعديل الموقع أسفل زر التحديث مباشرة
+savePositionButton.BackgroundColor3 = Color3.new(0.3, 0.6, 0.3)
+savePositionButton.Parent = frame
+
+savePositionButton.MouseButton1Click:Connect(function()
+    local localPlayer = game:GetService("Players").LocalPlayer
+    if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        savedPosition = localPlayer.Character.HumanoidRootPart.Position
+        print("موقع اللاعب تم حفظه")
+    end
+end)
+
+local toggleButton = Instance.new("TextButton")
+toggleButton.Text = "إخفاء القائمة"
+toggleButton.Size = UDim2.new(0, 90, 0, 30)
+toggleButton.Position = UDim2.new(1, -100, 0, 10) -- تحديد الموقع بالنسبة للشاشة
+toggleButton.AnchorPoint = Vector2.new(1, 0) -- تحديد النقطة الأساسية للزر على يمين الشاشة
+toggleButton.BackgroundColor3 = Color3.new(0.6, 0.2, 0.2) -- اللون الأحمر
+toggleButton.Parent = gui -- تعيين الوالد إلى gui بدلاً من frame
+
+local isHidden = false
+
+toggleButton.MouseButton1Click:Connect(function()
+    isHidden = not isHidden
+    frame.Visible = not isHidden
+    if isHidden then
+        toggleButton.Text = "إظهار القائمة"
+    else
+        toggleButton.Text = "إخفاء القائمة"
+    end
+end)
+
+updatePlayerList()
